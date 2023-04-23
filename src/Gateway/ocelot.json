@@ -1,0 +1,18 @@
+{
+    "Routes": [
+        {
+        "DownstreamPathTemplate": "/todos/{id}",
+        "DownstreamScheme": "http",
+        "DownstreamHostAndPorts": [
+            {
+                "Host": "jsonplaceholder.typicode.com"
+            }
+        ],
+        "UpstreamPathTemplate": "/todos/{id}",
+        "UpstreamHttpMethod": [ "Get" ]
+        }
+    ],
+    "GlobalConfiguration": {
+        "BaseUrl": "https://localhost:5000"
+    }
+}
