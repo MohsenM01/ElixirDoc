@@ -1,6 +1,7 @@
 using MediatR;
 using Identity.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 
 namespace Identity.Extensions;
 
@@ -19,6 +20,9 @@ public static class ServiceCollectionExtensions
 
         var connectionString = builder.Configuration.GetConnectionString("AppIdentityDbContext");
         builder.Services.AddDbContext<AppIdentityDbContext>(o => o.UseSqlServer(connectionString));
+
+        builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
+           .AddEntityFrameworkStores<AppIdentityDbContext>();
 
         builder.Services.AddMediatR(typeof(Program));
         builder.Services.AddAutoMapper(typeof(Program));
