@@ -11,10 +11,13 @@ namespace Identity.Features.Security;
 public class SecurityModule : IModule
 {
     private readonly IConfiguration _configuration;
+     private readonly ILogger<SecurityModule> _logger;
 
-    public SecurityModule(IConfiguration configuration)
+    public SecurityModule(IConfiguration configuration, ILogger<SecurityModule> logger)
     {
         _configuration = configuration;
+        _logger = logger;
+       
     }
 
     public IEndpointRouteBuilder RegisterEndpoints(IEndpointRouteBuilder endpoints)
@@ -83,6 +86,14 @@ public class SecurityModule : IModule
             var lockUserTask = await userMgr.SetLockoutEnabledAsync(userTask, enabled);
             var lockDateTask = await userMgr.SetLockoutEndDateAsync(userTask, DateTime.Now.AddDays(3));
             return lockDateTask.Succeeded && lockUserTask.Succeeded;
+        });
+
+        endpoints.MapGet("/api/security/getUser",
+        [AllowAnonymous]
+         (UserManager<IdentityUser> userMgr) =>
+        {
+             _logger.LogDebug(1, "NLog injected into HomeController");
+            return "Mohsen";
         });
         
         return endpoints;

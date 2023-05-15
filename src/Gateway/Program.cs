@@ -1,4 +1,7 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.Extensions.Caching.Distributed;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
 
@@ -12,6 +15,12 @@ builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddStackExchangeRedisCache(options =>
+ {
+     options.Configuration = "localhost";
+     options.InstanceName = "SampleInstance";
+ });
 
 builder.Configuration.AddJsonFile("ocelot.json", optional: false, reloadOnChange: true);
 builder.Services.AddOcelot(builder.Configuration);
@@ -28,15 +37,18 @@ app.UseCors("CORSPolicy");
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
-await app.UseOcelot();
+app.UseOcelot().Wait();
 
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
 };
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/weatherforecast", async (IDistributedCache distributedCache) =>
 {
+    var item = await distributedCache.GetAsync("Key1");
+    if (item != null)
+        return JsonSerializer.Deserialize<List<WeatherForecast>>(item);
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
         (
@@ -44,7 +56,10 @@ app.MapGet("/weatherforecast", () =>
             Random.Shared.Next(-20, 55),
             summaries[Random.Shared.Next(summaries.Length)]
         ))
-        .ToArray();
+        .ToList();
+
+    var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(forecast));
+    await distributedCache.SetAsync("Key1", bytes);
     return forecast;
 })
 .WithName("GetWeatherForecast")
