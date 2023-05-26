@@ -5,19 +5,24 @@ using Microsoft.AspNetCore.Authorization;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using Nest;
+using Elasticsearch.Net;
 
 namespace Identity.Features.Security;
 
 public class SecurityModule : IModule
 {
     private readonly IConfiguration _configuration;
-     private readonly ILogger<SecurityModule> _logger;
+    private readonly IElasticClient _elasticClient;
+    private readonly ILogger<SecurityModule> _logger;
 
-    public SecurityModule(IConfiguration configuration, ILogger<SecurityModule> logger)
+    public SecurityModule(IConfiguration configuration,
+     ILogger<SecurityModule> logger, IElasticClient elasticClient)
     {
         _configuration = configuration;
         _logger = logger;
-       
+        _elasticClient = elasticClient;
+
     }
 
     public IEndpointRouteBuilder RegisterEndpoints(IEndpointRouteBuilder endpoints)
@@ -36,6 +41,18 @@ public class SecurityModule : IModule
 
             if (result.Succeeded)
             {
+                try
+                {
+                    var indexResponse = await _elasticClient.IndexDocumentAsync(user.Id);
+                    if (indexResponse.IsValid == false)
+                    {
+                        _logger.LogError($"Failed to index document: {indexResponse.DebugInformation}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Error indexing document: {ex.Message}");
+                }
                 return result;
             }
             else
@@ -49,7 +66,7 @@ public class SecurityModule : IModule
         async (UserManager<IdentityUser> userMgr, User user) =>
         {
             var identityUsr = await userMgr.FindByNameAsync(user.UserName);
-        
+
             if (await userMgr.CheckPasswordAsync(identityUsr, user.PasswordHash))
             {
                 var issuer = "Identity";
@@ -90,12 +107,55 @@ public class SecurityModule : IModule
 
         endpoints.MapGet("/api/security/getUser",
         [AllowAnonymous]
-         (UserManager<IdentityUser> userMgr) =>
+        async (UserManager<IdentityUser> userMgr) =>
         {
-             _logger.LogDebug(1, "NLog injected into HomeController");
+
+            var pool = new SingleNodeConnectionPool(new Uri("https://localhost:9200"));
+
+            var connectionSettings = new ConnectionSettings(pool)
+                .BasicAuthentication("elastic", "changeme");
+
+            var client = new ElasticClient(connectionSettings);
+
+            var settings = new IndexSettings();
+            settings.NumberOfReplicas = 1;
+            settings.NumberOfShards = 5;
+            //settings.Settings.Add("merge.policy.merge_factor", "10");
+            //settings.Settings.Add("search.slowlog.threshold.fetch.warn", "1s");
+
+            var tweet = new Tweet
+            {
+                Id = 1,
+                User = "stevejgordon",
+                PostDate = new DateTime(2009, 11, 15),
+                Message = "Trying out the client, so far so good?"
+            };
+
+            var response = await client.IndexDocumentAsync(tweet);
+
+            if (response.IsValid)
+            {
+                Console.WriteLine($"Index document with ID {response.Id} succeeded.");
+            }
+
+            _logger.LogDebug(1, "NLog injected into HomeController");
+            _logger.LogDebug("Debug message");
+            _logger.LogTrace("Trace message");
+            _logger.LogError("Error message");
+            _logger.LogWarning("Warning message");
+            _logger.LogCritical("Critical message");
+            _logger.LogInformation("Information message");
             return "Mohsen";
         });
-        
+
         return endpoints;
+    }
+
+    public class Tweet
+    {
+        public int Id { get; set; }
+        public string User { get; set; }
+        public DateTime PostDate { get; set; }
+        public string Message { get; set; }
     }
 }
