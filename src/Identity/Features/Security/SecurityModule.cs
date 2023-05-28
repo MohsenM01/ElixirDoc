@@ -1,28 +1,25 @@
+using System.Text;
 using Identity.Contracts;
 using Identity.Domain.Model;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Authorization;
-using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using Nest;
-using Elasticsearch.Net;
+using Microsoft.AspNetCore.Authorization;
+using Elastic.Transport;
+using Elastic.Clients.Elasticsearch;
 
 namespace Identity.Features.Security;
 
 public class SecurityModule : IModule
 {
     private readonly IConfiguration _configuration;
-    private readonly IElasticClient _elasticClient;
     private readonly ILogger<SecurityModule> _logger;
 
     public SecurityModule(IConfiguration configuration,
-     ILogger<SecurityModule> logger, IElasticClient elasticClient)
+     ILogger<SecurityModule> logger)
     {
         _configuration = configuration;
         _logger = logger;
-        _elasticClient = elasticClient;
-
     }
 
     public IEndpointRouteBuilder RegisterEndpoints(IEndpointRouteBuilder endpoints)
@@ -38,25 +35,13 @@ public class SecurityModule : IModule
             };
 
             var result = await userMgr.CreateAsync(identityUser, user.PasswordHash);
-
             if (result.Succeeded)
             {
-                try
-                {
-                    var indexResponse = await _elasticClient.IndexDocumentAsync(user.Id);
-                    if (indexResponse.IsValid == false)
-                    {
-                        _logger.LogError($"Failed to index document: {indexResponse.DebugInformation}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError($"Error indexing document: {ex.Message}");
-                }
                 return result;
             }
             else
             {
+                _logger.LogError($"Error indexing document: {result.Errors}");
                 return result;
             }
         });
@@ -109,53 +94,29 @@ public class SecurityModule : IModule
         [AllowAnonymous]
         async (UserManager<IdentityUser> userMgr) =>
         {
-
-            var pool = new SingleNodeConnectionPool(new Uri("https://localhost:9200"));
-
-            var connectionSettings = new ConnectionSettings(pool)
-                .BasicAuthentication("elastic", "changeme");
-
-            var client = new ElasticClient(connectionSettings);
-
-            var settings = new IndexSettings();
-            settings.NumberOfReplicas = 1;
-            settings.NumberOfShards = 5;
-            //settings.Settings.Add("merge.policy.merge_factor", "10");
-            //settings.Settings.Add("search.slowlog.threshold.fetch.warn", "1s");
-
-            var tweet = new Tweet
+            var nodes = new Uri[]
             {
-                Id = 1,
-                User = "stevejgordon",
-                PostDate = new DateTime(2009, 11, 15),
-                Message = "Trying out the client, so far so good?"
+                new Uri("http://localhost:9200")
             };
+            var staticNodePool = new StaticNodePool(nodes);
+            var settings = new ElasticsearchClientSettings(staticNodePool)
+                .Authentication(new BasicAuthentication("elastic", "changeme"));
 
-            var response = await client.IndexDocumentAsync(tweet);
-
-            if (response.IsValid)
+            var client = new ElasticsearchClient(settings);
+            var identityUser = new IdentityUser
             {
-                Console.WriteLine($"Index document with ID {response.Id} succeeded.");
+                Id = "664dc1c9-9b97-4fe3-97b1-98f2cafebfe7",
+                UserName = "Farzad"
+            };
+            var response = await client.IndexAsync(identityUser, "identity-user-index");
+            if (response.IsValidResponse)
+            {
+                return($"Index document with ID {response.Id} succeeded.");
             }
 
-            _logger.LogDebug(1, "NLog injected into HomeController");
-            _logger.LogDebug("Debug message");
-            _logger.LogTrace("Trace message");
-            _logger.LogError("Error message");
-            _logger.LogWarning("Warning message");
-            _logger.LogCritical("Critical message");
-            _logger.LogInformation("Information message");
             return "Mohsen";
         });
 
         return endpoints;
-    }
-
-    public class Tweet
-    {
-        public int Id { get; set; }
-        public string User { get; set; }
-        public DateTime PostDate { get; set; }
-        public string Message { get; set; }
     }
 }
