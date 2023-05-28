@@ -2,6 +2,8 @@ using MediatR;
 using Identity.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Elastic.Clients.Elasticsearch;
+using Elastic.Transport;
 
 namespace Identity.Extensions;
 
@@ -27,6 +29,20 @@ public static class ServiceCollectionExtensions
         builder.Services.AddMediatR(typeof(Program));
         builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddAllModules(typeof(Program));
+
+        services.AddSingleton<ElasticsearchClient>(sp =>
+        {
+            var nodes = new Uri[]
+           {
+           new Uri("http://localhost:9200")
+           };
+
+            var staticNodePool = new StaticNodePool(nodes);
+            var settings = new ElasticsearchClientSettings(staticNodePool)
+              .Authentication(new BasicAuthentication("elastic", "changeme"));
+
+            return new ElasticsearchClient(settings);
+        });
 
         return services;
     }
