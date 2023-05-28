@@ -14,12 +14,15 @@ public class SecurityModule : IModule
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<SecurityModule> _logger;
+    private readonly ElasticsearchClient _elasticSearchClient;
 
     public SecurityModule(IConfiguration configuration,
-     ILogger<SecurityModule> logger)
+     ILogger<SecurityModule> logger,
+     ElasticsearchClient elasticSearchClient)
     {
         _configuration = configuration;
         _logger = logger;
+        _elasticSearchClient = elasticSearchClient;
     }
 
     public IEndpointRouteBuilder RegisterEndpoints(IEndpointRouteBuilder endpoints)
@@ -94,24 +97,15 @@ public class SecurityModule : IModule
         [AllowAnonymous]
         async (UserManager<IdentityUser> userMgr) =>
         {
-            var nodes = new Uri[]
-            {
-                new Uri("http://localhost:9200")
-            };
-            var staticNodePool = new StaticNodePool(nodes);
-            var settings = new ElasticsearchClientSettings(staticNodePool)
-                .Authentication(new BasicAuthentication("elastic", "changeme"));
-
-            var client = new ElasticsearchClient(settings);
             var identityUser = new IdentityUser
             {
                 Id = "664dc1c9-9b97-4fe3-97b1-98f2cafebfe7",
                 UserName = "Farzad"
             };
-            var response = await client.IndexAsync(identityUser, "identity-user-index");
+            var response = await _elasticSearchClient.IndexAsync(identityUser, "identity-user-index");
             if (response.IsValidResponse)
             {
-                return($"Index document with ID {response.Id} succeeded.");
+                return ($"Index document with ID {response.Id} succeeded.");
             }
 
             return "Mohsen";
